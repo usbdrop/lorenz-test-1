@@ -1,9 +1,9 @@
 @echo off
 setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 
-set "APP_ID=usb03-it"
-set "RID=konin vC3"
-set "ROLE=audit"
+set "APP_ID=usb01-test1"
+set "RID=Lore01"
+set "ROLE=test-audit"
 set "AGENT_VERSION=1.0"
 set "CONFIG_VERSION=local-bat-1.0"
 
