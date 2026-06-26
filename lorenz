@@ -1,7 +1,7 @@
 @echo off
 setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 
-set "APP_ID=usb01-test1"
+set "APP_ID=usb01-test2"
 set "RID=Lore01"
 set "ROLE=test-audit"
 set "AGENT_VERSION=1.0"
