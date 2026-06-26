@@ -1,0 +1,130 @@
+@echo off
+setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
+
+set "APP_ID=usb03-it"
+set "RID=konin vC3"
+set "ROLE=audit"
+set "AGENT_VERSION=1.0"
+set "CONFIG_VERSION=local-bat-1.0"
+
+set "ENDPOINT=https://vvvvvv.com.pl/usb/dashboard/log.php"
+
+set "TIMESTAMP_CLIENT=%DATE%_%TIME%"
+set "USERNAME_LOCAL=%USERNAME%"
+set "HOSTNAME_LOCAL=%COMPUTERNAME%"
+set "DOMAIN_LOCAL=%USERDOMAIN%"
+set "IS_ADMIN=user"
+set "LOCAL_IP=brak"
+set "PUBLIC_IP=brak"
+set "OS_INFO=brak"
+set "DEFAULT_BROWSER=brak"
+set "SSID=brak"
+set "SESSION_DURATION=brak"
+set "LAST_BOOT=brak"
+
+where curl >nul 2>&1
+if errorlevel 1 (
+    exit /b 2
+)
+
+whoami /groups | find "S-1-5-32-544" >nul 2>&1 && set "IS_ADMIN=admin"
+
+
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /C:"IPv4"') do (
+    set "ipraw=%%a"
+    set "ipraw=!ipraw: =!"
+
+    echo !ipraw! | findstr /R "^10\." >nul && set "LOCAL_IP=!ipraw!"
+    echo !ipraw! | findstr /R "^192\.168\." >nul && set "LOCAL_IP=!ipraw!"
+    echo !ipraw! | findstr /R "^172\.1[6-9]\." >nul && set "LOCAL_IP=!ipraw!"
+    echo !ipraw! | findstr /R "^172\.2[0-9]\." >nul && set "LOCAL_IP=!ipraw!"
+    echo !ipraw! | findstr /R "^172\.3[0-1]\." >nul && set "LOCAL_IP=!ipraw!"
+)
+
+for /f %%p in ('curl -s --max-time 5 https://ifconfig.me 2^>nul') do (
+    set "PUBLIC_IP=%%p"
+)
+
+for /f "tokens=*" %%a in ('ver') do (
+    set "OS_INFO=%%a"
+)
+
+for /f "tokens=2 delims==" %%a in ('wmic os get Caption /value 2^>nul ^| find "="') do (
+    set "OS_CAPTION=%%a"
+)
+
+for /f "tokens=2 delims==" %%a in ('wmic os get Version /value 2^>nul ^| find "="') do (
+    set "OS_VERSION=%%a"
+)
+
+if defined OS_CAPTION (
+    if defined OS_VERSION (
+        set "OS_INFO=!OS_CAPTION! !OS_VERSION!"
+    )
+)
+
+for /f "tokens=3" %%a in ('reg query "HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" /v ProgId 2^>nul') do (
+    set "DEFAULT_BROWSER=%%a"
+)
+
+if /i "%DEFAULT_BROWSER%"=="MSEdgeHTM" set "DEFAULT_BROWSER=Edge"
+if /i "%DEFAULT_BROWSER%"=="ChromeHTML" set "DEFAULT_BROWSER=Chrome"
+if /i "%DEFAULT_BROWSER%"=="FirefoxURL" set "DEFAULT_BROWSER=Firefox"
+
+if "%DEFAULT_BROWSER%"=="brak" (
+    reg query "HKLM\Software\Microsoft\Edge\BLBeacon" /v version >nul 2>&1 && (
+        for /f "tokens=3" %%v in ('reg query "HKLM\Software\Microsoft\Edge\BLBeacon" /v version') do set "DEFAULT_BROWSER=Edge %%v"
+    )
+)
+
+if "%DEFAULT_BROWSER%"=="brak" (
+    reg query "HKLM\Software\Google\Chrome\BLBeacon" /v version >nul 2>&1 && (
+        for /f "tokens=3" %%v in ('reg query "HKLM\Software\Google\Chrome\BLBeacon" /v version') do set "DEFAULT_BROWSER=Chrome %%v"
+    )
+)
+
+for /f "tokens=2 delims=:" %%a in ('netsh wlan show interfaces 2^>nul ^| findstr /i "SSID" ^| findstr /v "BSSID"') do (
+    set "SSID=%%a"
+    set "SSID=!SSID:~1!"
+)
+
+
+for /f "tokens=2,* delims=:" %%a in ('systeminfo ^| findstr /C:"Czas uruchomienia systemu" /C:"System Boot Time"') do (
+    set "LAST_BOOT_RAW=%%a:%%b"
+
+    REM Usuń spacje z początku
+    for /f "tokens=* delims= " %%x in ("!LAST_BOOT_RAW!") do (
+        set "LAST_BOOT=%%x"
+    )
+
+    REM Normalizacja do CSV
+    set "LAST_BOOT=!LAST_BOOT: =_!"
+    set "LAST_BOOT=!LAST_BOOT:,=_!"
+)
+
+
+set "SESSION_DURATION=brak"
+
+for /f "usebackq delims=" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Get-Process explorer -ErrorAction SilentlyContinue | Select-Object -First 1; if ($p) { $d = (Get-Date) - $p.StartTime; '{0}d_{1:00}h_{2:00}m_{3:00}s' -f $d.Days, $d.Hours, $d.Minutes, $d.Seconds } else { 'brak' }"`) do (
+    set "SESSION_DURATION=%%a"
+)
+
+
+set "TIMESTAMP_CLIENT=%TIMESTAMP_CLIENT:,=_%"
+set "USERNAME_LOCAL=%USERNAME_LOCAL:,=;%"
+set "HOSTNAME_LOCAL=%HOSTNAME_LOCAL:,=;%"
+set "DOMAIN_LOCAL=%DOMAIN_LOCAL:,=;%"
+set "OS_INFO=%OS_INFO:,=;%"
+set "DEFAULT_BROWSER=%DEFAULT_BROWSER:,=;%"
+set "SSID=%SSID:,=;%"
+set "LAST_BOOT=%LAST_BOOT:,=_%"
+set "SESSION_DURATION=%SESSION_DURATION:,=_%"
+
+
+set "LINE=%APP_ID%,%RID%,%ROLE%,%AGENT_VERSION%,%CONFIG_VERSION%,%TIMESTAMP_CLIENT%,%USERNAME_LOCAL%,%HOSTNAME_LOCAL%,%DOMAIN_LOCAL%,%IS_ADMIN%,%LOCAL_IP%,%PUBLIC_IP%,%OS_INFO%,%DEFAULT_BROWSER%,%SSID%,%SESSION_DURATION%,%LAST_BOOT%"
+
+curl -s --max-time 10 -X POST -H "Content-Type: application/x-www-form-urlencoded" ^
+     --data-urlencode "data=%LINE%" ^
+     "%ENDPOINT%" >nul 2>&1
+
+exit /b 0
